@@ -127,18 +127,60 @@
             background: white;
             border-radius: 5px;
         }
+        .confidence-display {
+            text-align: center;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+            margin: 15px 0;
+            color: white;
+        }
+        .confidence-value {
+            font-size: 48px;
+            font-weight: bold;
+            margin: 10px 0;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        .confidence-label {
+            font-size: 14px;
+            opacity: 0.9;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .confidence-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        .confidence-high {
+            background: rgba(76, 175, 80, 0.3);
+            border: 2px solid rgba(76, 175, 80, 0.8);
+        }
+        .confidence-medium {
+            background: rgba(255, 193, 7, 0.3);
+            border: 2px solid rgba(255, 193, 7, 0.8);
+        }
+        .confidence-low {
+            background: rgba(244, 67, 54, 0.3);
+            border: 2px solid rgba(244, 67, 54, 0.8);
+        }
         .progress-bar {
             width: 100%;
-            height: 20px;
-            background: #e0e0e0;
-            border-radius: 10px;
+            height: 25px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 12px;
             overflow: hidden;
-            margin-top: 5px;
+            margin-top: 15px;
+            border: 2px solid rgba(255, 255, 255, 0.5);
         }
         .progress-fill {
             height: 100%;
-            background: #667eea;
-            transition: width 0.3s;
+            background: rgba(255, 255, 255, 0.9);
+            transition: width 0.5s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
         }
         .stats-grid {
             display: grid;
@@ -542,22 +584,37 @@
                     const previewImg = document.getElementById('previewImage');
                     const imageSrc = previewImg ? previewImg.src : '';
                     
+                    // Calculate confidence percentage and determine badge
+                    const confidencePercent = (data.confidence * 100).toFixed(2);
+                    let confidenceClass = 'confidence-high';
+                    let confidenceText = 'High Confidence';
+                    
+                    if (data.confidence < 0.7) {
+                        confidenceClass = 'confidence-medium';
+                        confidenceText = 'Medium Confidence';
+                    }
+                    if (data.confidence < 0.5) {
+                        confidenceClass = 'confidence-low';
+                        confidenceText = 'Low Confidence';
+                    }
+                    
                     resultDiv.className = 'result success';
                     resultDiv.innerHTML = `
                         <h3>Prediction Result:</h3>
                         ${imageSrc ? `<div style="text-align: center; margin-bottom: 15px;"><img src="${imageSrc}" alt="Uploaded image" style="max-width: 100%; max-height: 200px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"></div>` : ''}
                         <div class="prediction-result">
                             <div class="prediction-item">
-                                <strong>Predicted Class:</strong>
-                                <span>${data.predicted_class}</span>
+                                <strong>Predicted Disease:</strong>
+                                <span style="font-weight: 600; color: #667eea;">${data.predicted_class}</span>
                             </div>
-                            <div class="prediction-item">
-                                <strong>Confidence:</strong>
-                                <span>${(data.confidence * 100).toFixed(2)}%</span>
-                            </div>
+                        </div>
+                        <div class="confidence-display">
+                            <div class="confidence-label">Confidence Level</div>
+                            <div class="confidence-value">${confidencePercent}%</div>
                             <div class="progress-bar">
                                 <div class="progress-fill" style="width: ${data.confidence * 100}%"></div>
                             </div>
+                            <div class="confidence-badge ${confidenceClass}">${confidenceText}</div>
                         </div>
                     `;
                 } else {
