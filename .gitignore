@@ -32,8 +32,6 @@ ENV/
 
 # Data and Models (Large files)
 data/raw/
-data/train/
-data/test/
 models/*.pkl
 models/*.tf
 models/*.pb

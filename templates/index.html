@@ -269,17 +269,36 @@
         async function loadStats() {
             try {
                 const response = await fetch('/api/stats');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 const data = await response.json();
                 
-                document.getElementById('numClasses').textContent = data.num_classes;
-                document.getElementById('trainImages').textContent = data.total_train_images.toLocaleString();
-                document.getElementById('testImages').textContent = data.total_test_images.toLocaleString();
+                // Handle errors from API
+                if (data.error) {
+                    console.error('API error:', data.error);
+                    document.getElementById('numClasses').textContent = '-';
+                    document.getElementById('trainImages').textContent = '-';
+                    document.getElementById('testImages').textContent = '-';
+                    document.getElementById('modelUptime').textContent = 'Error';
+                    return;
+                }
+                
+                document.getElementById('numClasses').textContent = data.num_classes || 0;
+                document.getElementById('trainImages').textContent = (data.total_train_images || 0).toLocaleString();
+                document.getElementById('testImages').textContent = (data.total_test_images || 0).toLocaleString();
                 document.getElementById('modelUptime').textContent = data.model_loaded_at ? 'Loaded' : 'Not Loaded';
                 
-                // Update chart
-                updateChart(data.class_distribution);
+                // Update chart only if distribution data exists
+                if (data.class_distribution) {
+                    updateChart(data.class_distribution);
+                }
             } catch (error) {
                 console.error('Error loading stats:', error);
+                document.getElementById('numClasses').textContent = '-';
+                document.getElementById('trainImages').textContent = '-';
+                document.getElementById('testImages').textContent = '-';
+                document.getElementById('modelUptime').textContent = 'Error';
             }
         }
 
@@ -330,8 +349,16 @@
                 return;
             }
 
+            // Check file size (limit to 10MB)
+            const file = fileInput.files[0];
+            const maxSize = 10 * 1024 * 1024; // 10MB
+            if (file.size > maxSize) {
+                alert('File size too large. Please select an image smaller than 10MB.');
+                return;
+            }
+
             const formData = new FormData();
-            formData.append('image', fileInput.files[0]);
+            formData.append('image', file);
 
             const resultDiv = document.getElementById('singleResult');
             resultDiv.style.display = 'block';
@@ -343,6 +370,11 @@
                     method: 'POST',
                     body: formData
                 });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
                 const data = await response.json();
 
                 if (data.success) {
@@ -365,11 +397,12 @@
                     `;
                 } else {
                     resultDiv.className = 'result error';
-                    resultDiv.innerHTML = `<p>Error: ${data.error}</p>`;
+                    resultDiv.innerHTML = `<p>Error: ${data.error || 'Unknown error occurred'}</p>`;
                 }
             } catch (error) {
+                console.error('Prediction error:', error);
                 resultDiv.className = 'result error';
-                resultDiv.innerHTML = `<p>Error: ${error.message}</p>`;
+                resultDiv.innerHTML = `<p>Error: ${error.message || 'Failed to upload image. Please try again.'}</p>`;
             }
         }
 

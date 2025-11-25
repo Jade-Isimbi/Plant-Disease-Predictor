@@ -3,6 +3,7 @@ Flask API for Plant Disease Classification
 """
 from flask import Flask, request, jsonify, render_template, send_from_directory
 from flask_cors import CORS
+from werkzeug.exceptions import RequestEntityTooLarge
 import os
 from pathlib import Path
 import numpy as np
@@ -21,6 +22,9 @@ app = Flask(__name__,
             template_folder=Path(__file__).parent.parent / 'templates',
             static_folder=Path(__file__).parent.parent / 'static')
 CORS(app)
+
+# Configure max file size (10MB)
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
 
 # Configuration
 BASE_DIR = Path(__file__).parent.parent
@@ -52,6 +56,11 @@ def load_model_if_exists():
 # Load model on startup
 load_model_if_exists()
 
+# Error handler for file size limit
+@app.errorhandler(RequestEntityTooLarge)
+def handle_file_too_large(e):
+    return jsonify({'error': 'File too large. Maximum size is 10MB.'}), 413
+
 @app.route('/')
 def index():
     """Serve the main UI"""
@@ -80,7 +89,16 @@ def predict():
     if file.filename == '':
         return jsonify({'error': 'No file selected'}), 400
     
+    # Check file extension
+    allowed_extensions = {'.jpg', '.jpeg', '.png', '.JPG', '.JPEG', '.PNG'}
+    file_ext = Path(file.filename).suffix
+    if file_ext not in allowed_extensions:
+        return jsonify({'error': 'Invalid file type. Please upload a JPG or PNG image.'}), 400
+    
     try:
+        # Ensure upload directory exists
+        UPLOAD_DIR.mkdir(exist_ok=True, parents=True)
+        
         # Save uploaded file
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"{timestamp}_{file.filename}"
@@ -100,7 +118,11 @@ def predict():
             'image_path': filename
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        import traceback
+        error_msg = str(e)
+        print(f"Prediction error: {error_msg}")
+        print(traceback.format_exc())
+        return jsonify({'error': f'Prediction failed: {error_msg}'}), 500
 
 @app.route('/api/predict/batch', methods=['POST'])
 def predict_batch_endpoint():
@@ -193,24 +215,38 @@ def stats():
     if model is None or class_names is None:
         return jsonify({'error': 'Model not loaded'}), 500
     
-    # Count images per class
+    # Count images per class (handle missing directories gracefully)
     train_counts = {}
     test_counts = {}
+    total_train = 0
+    total_test = 0
     
-    for class_name in class_names:
-        train_path = TRAIN_DIR / class_name
-        test_path = TEST_DIR / class_name
-        
-        train_images = list(train_path.glob('*.JPG')) + list(train_path.glob('*.jpg')) + list(train_path.glob('*.png'))
-        test_images = list(test_path.glob('*.JPG')) + list(test_path.glob('*.jpg')) + list(test_path.glob('*.png'))
-        
-        train_counts[class_name] = len(train_images)
-        test_counts[class_name] = len(test_images)
+    # Only count if directories exist
+    if TRAIN_DIR.exists() and TEST_DIR.exists():
+        for class_name in class_names:
+            train_path = TRAIN_DIR / class_name
+            test_path = TEST_DIR / class_name
+            
+            train_count = 0
+            test_count = 0
+            
+            if train_path.exists():
+                train_images = list(train_path.glob('*.JPG')) + list(train_path.glob('*.jpg')) + list(train_path.glob('*.png'))
+                train_count = len(train_images)
+            
+            if test_path.exists():
+                test_images = list(test_path.glob('*.JPG')) + list(test_path.glob('*.jpg')) + list(test_path.glob('*.png'))
+                test_count = len(test_images)
+            
+            train_counts[class_name] = train_count
+            test_counts[class_name] = test_count
+            total_train += train_count
+            total_test += test_count
     
     return jsonify({
-        'num_classes': len(class_names),
-        'total_train_images': sum(train_counts.values()),
-        'total_test_images': sum(test_counts.values()),
+        'num_classes': len(class_names) if class_names else 0,
+        'total_train_images': total_train,
+        'total_test_images': total_test,
         'class_distribution': {
             'train': train_counts,
             'test': test_counts
