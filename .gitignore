@@ -34,16 +34,16 @@ ENV/
 data/raw/
 data/train/
 data/test/
-models/*.h5
 models/*.pkl
 models/*.tf
 models/*.pb
 models/*.ckpt
-*.h5
 *.pkl
 *.tf
 *.pb
 *.ckpt
+# Allow the main model file for deployment
+!models/plant_disease_model.h5
 
 # Keep directory structure but ignore contents
 !data/raw/.gitkeep
