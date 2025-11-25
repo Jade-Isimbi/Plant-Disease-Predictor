@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plant Disease Classification - ML Pipeline</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .header h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .status {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .status.online {
+            background: #4caf50;
+            color: white;
+        }
+        .status.offline {
+            background: #f44336;
+            color: white;
+        }
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .card h2 {
+            color: #333;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        .upload-area {
+            border: 2px dashed #667eea;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .upload-area:hover {
+            background: #f0f0f0;
+            border-color: #764ba2;
+        }
+        .upload-area.dragover {
+            background: #e3f2fd;
+            border-color: #2196f3;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+            transition: background 0.3s;
+        }
+        .btn:hover {
+            background: #764ba2;
+        }
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            display: none;
+        }
+        .result.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .result.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .prediction-result {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        .prediction-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            margin: 5px 0;
+            background: white;
+            border-radius: 5px;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #667eea;
+            transition: width 0.3s;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .stat-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .stat-label {
+            color: #666;
+            margin-top: 5px;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1> Plant Disease Classification System</h1>
+            <p>ML Pipeline - Model Monitoring & Prediction</p>
+            <span id="modelStatus" class="status offline">Checking...</span>
+        </div>
+
+        <div class="card">
+            <h2>Model Statistics</h2>
+            <div id="statsContainer" class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="numClasses">-</div>
+                    <div class="stat-label">Classes</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="trainImages">-</div>
+                    <div class="stat-label">Train Images</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="testImages">-</div>
+                    <div class="stat-label">Test Images</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="modelUptime">-</div>
+                    <div class="stat-label">Model Status</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Single Image Prediction</h2>
+            <div class="upload-area" id="uploadArea">
+                <p>📁 Click to upload or drag and drop an image</p>
+                <input type="file" id="imageInput" accept="image/*">
+            </div>
+            <button class="btn" onclick="predictImage()">Predict Disease</button>
+            <div id="singleResult" class="result"></div>
+        </div>
+
+        <div class="card">
+            <h2> Bulk Upload & Retraining</h2>
+            <div class="upload-area" id="bulkUploadArea">
+                <p>Click to upload multiple images for retraining</p>
+                <input type="file" id="bulkImageInput" accept="image/*" multiple>
+            </div>
+            <button class="btn" onclick="uploadBulkImages()">Upload Images</button>
+            <button class="btn" onclick="triggerRetraining()">🔄 Trigger Retraining</button>
+            <div id="retrainResult" class="result"></div>
+            <div class="loading" id="retrainLoading">
+                <div class="spinner"></div>
+                <p>Retraining model... This may take a few minutes.</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Data Visualizations</h2>
+            <canvas id="classDistributionChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // Check model status on load
+        async function checkModelStatus() {
+            try {
+                const response = await fetch('/api/health');
+                const data = await response.json();
+                const statusEl = document.getElementById('modelStatus');
+                
+                if (data.model_loaded) {
+                    statusEl.textContent = 'Model Online';
+                    statusEl.className = 'status online';
+                } else {
+                    statusEl.textContent = 'Model Offline';
+                    statusEl.className = 'status offline';
+                }
+                
+                loadStats();
+            } catch (error) {
+                document.getElementById('modelStatus').textContent = 'API Error';
+                document.getElementById('modelStatus').className = 'status offline';
+            }
+        }
+
+        // Load statistics
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+                
+                document.getElementById('numClasses').textContent = data.num_classes;
+                document.getElementById('trainImages').textContent = data.total_train_images.toLocaleString();
+                document.getElementById('testImages').textContent = data.total_test_images.toLocaleString();
+                document.getElementById('modelUptime').textContent = data.model_loaded_at ? 'Loaded' : 'Not Loaded';
+                
+                // Update chart
+                updateChart(data.class_distribution);
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        // Update class distribution chart
+        function updateChart(distribution) {
+            const ctx = document.getElementById('classDistributionChart').getContext('2d');
+            const classes = Object.keys(distribution.train).slice(0, 10); // Top 10
+            const trainData = classes.map(c => distribution.train[c]);
+            const testData = classes.map(c => distribution.test[c]);
+            
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: classes,
+                    datasets: [{
+                        label: 'Train',
+                        data: trainData,
+                        backgroundColor: 'rgba(102, 126, 234, 0.6)'
+                    }, {
+                        label: 'Test',
+                        data: testData,
+                        backgroundColor: 'rgba(118, 75, 162, 0.6)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        // File upload handlers
+        document.getElementById('uploadArea').addEventListener('click', () => {
+            document.getElementById('imageInput').click();
+        });
+
+        document.getElementById('bulkUploadArea').addEventListener('click', () => {
+            document.getElementById('bulkImageInput').click();
+        });
+
+        // Predict single image
+        async function predictImage() {
+            const fileInput = document.getElementById('imageInput');
+            if (!fileInput.files[0]) {
+                alert('Please select an image first');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('image', fileInput.files[0]);
+
+            const resultDiv = document.getElementById('singleResult');
+            resultDiv.style.display = 'block';
+            resultDiv.className = 'result';
+            resultDiv.innerHTML = '<p>Predicting...</p>';
+
+            try {
+                const response = await fetch('/api/predict', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+                        <h3>Prediction Result:</h3>
+                        <div class="prediction-result">
+                            <div class="prediction-item">
+                                <strong>Predicted Class:</strong>
+                                <span>${data.predicted_class}</span>
+                            </div>
+                            <div class="prediction-item">
+                                <strong>Confidence:</strong>
+                                <span>${(data.confidence * 100).toFixed(2)}%</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: ${data.confidence * 100}%"></div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = `<p>Error: ${data.error}</p>`;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `<p>Error: ${error.message}</p>`;
+            }
+        }
+
+        // Upload bulk images
+        async function uploadBulkImages() {
+            const fileInput = document.getElementById('bulkImageInput');
+            if (!fileInput.files.length) {
+                alert('Please select images first');
+                return;
+            }
+
+            const formData = new FormData();
+            for (let file of fileInput.files) {
+                formData.append('images', file);
+            }
+
+            try {
+                const response = await fetch('/api/predict/batch', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    alert(`Successfully processed ${data.total} images`);
+                } else {
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        // Trigger retraining
+        async function triggerRetraining() {
+            if (!confirm('This will retrain the model. Continue?')) {
+                return;
+            }
+
+            const loadingDiv = document.getElementById('retrainLoading');
+            const resultDiv = document.getElementById('retrainResult');
+            loadingDiv.style.display = 'block';
+            resultDiv.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/retrain', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                loadingDiv.style.display = 'none';
+                resultDiv.style.display = 'block';
+
+                if (data.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+                        <p> Model retrained successfully!</p>
+                        <p>Final Accuracy: ${(data.final_accuracy * 100).toFixed(2)}%</p>
+                        <p>Epochs Trained: ${data.epochs_trained}</p>
+                    `;
+                    checkModelStatus();
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = `<p>Error: ${data.error}</p>`;
+                }
+            } catch (error) {
+                loadingDiv.style.display = 'none';
+                resultDiv.style.display = 'block';
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `<p>Error: ${error.message}</p>`;
+            }
+        }
+
+       
+        checkModelStatus();
+        setInterval(checkModelStatus, 30000); 
+    </script>
+</body>
+</html>
+
+
+
