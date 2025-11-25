@@ -179,6 +179,67 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        .image-preview {
+            margin-top: 15px;
+            text-align: center;
+            display: none;
+        }
+        .image-preview img {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin: 10px 0;
+        }
+        .image-preview p {
+            color: #666;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        .selected-file {
+            margin-top: 10px;
+            padding: 10px;
+            background: #e3f2fd;
+            border-radius: 5px;
+            display: none;
+        }
+        .selected-file strong {
+            color: #1976d2;
+        }
+        .bulk-preview {
+            margin-top: 15px;
+            display: none;
+        }
+        .bulk-preview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .bulk-preview-item {
+            position: relative;
+            border-radius: 5px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .bulk-preview-item img {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+        }
+        .bulk-preview-item .file-name {
+            padding: 5px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            font-size: 11px;
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
     </style>
 </head>
 <body>
@@ -214,18 +275,32 @@
         <div class="card">
             <h2>Single Image Prediction</h2>
             <div class="upload-area" id="uploadArea">
-                <p>📁 Click to upload or drag and drop an image</p>
+                <p>Click to upload or drag and drop an image</p>
                 <input type="file" id="imageInput" accept="image/*">
+            </div>
+            <div class="selected-file" id="selectedFile">
+                <strong>Selected:</strong> <span id="fileName"></span>
+            </div>
+            <div class="image-preview" id="imagePreview">
+                <img id="previewImage" src="" alt="Preview">
+                <p>Image Preview</p>
             </div>
             <button class="btn" onclick="predictImage()">Predict Disease</button>
             <div id="singleResult" class="result"></div>
         </div>
 
         <div class="card">
-            <h2> Bulk Upload & Retraining</h2>
+            <h2>Bulk Upload & Retraining</h2>
             <div class="upload-area" id="bulkUploadArea">
                 <p>Click to upload multiple images for retraining</p>
                 <input type="file" id="bulkImageInput" accept="image/*" multiple>
+            </div>
+            <div class="selected-file" id="bulkSelectedFile">
+                <strong>Selected:</strong> <span id="bulkFileCount">0</span> file(s)
+            </div>
+            <div class="bulk-preview" id="bulkPreview">
+                <p style="margin-bottom: 10px; color: #666;"><strong>Preview:</strong></p>
+                <div class="bulk-preview-grid" id="bulkPreviewGrid"></div>
             </div>
             <button class="btn" onclick="uploadBulkImages()">Upload Images</button>
             <button class="btn" onclick="triggerRetraining()">🔄 Trigger Retraining</button>
@@ -243,7 +318,7 @@
     </div>
 
     <script>
-        // Check model status on load
+        
         async function checkModelStatus() {
             try {
                 const response = await fetch('/api/health');
@@ -265,7 +340,7 @@
             }
         }
 
-        // Load statistics
+       
         async function loadStats() {
             try {
                 const response = await fetch('/api/stats');
@@ -274,7 +349,7 @@
                 }
                 const data = await response.json();
                 
-                // Handle errors from API
+                
                 if (data.error) {
                     console.error('API error:', data.error);
                     document.getElementById('numClasses').textContent = '-';
@@ -302,14 +377,23 @@
             }
         }
 
+        // Store chart instance globally
+        let classDistributionChart = null;
+
         // Update class distribution chart
         function updateChart(distribution) {
             const ctx = document.getElementById('classDistributionChart').getContext('2d');
+            
+            // Destroy existing chart if it exists
+            if (classDistributionChart) {
+                classDistributionChart.destroy();
+            }
+            
             const classes = Object.keys(distribution.train).slice(0, 10); // Top 10
             const trainData = classes.map(c => distribution.train[c]);
             const testData = classes.map(c => distribution.test[c]);
             
-            new Chart(ctx, {
+            classDistributionChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels: classes,
@@ -339,6 +423,82 @@
 
         document.getElementById('bulkUploadArea').addEventListener('click', () => {
             document.getElementById('bulkImageInput').click();
+        });
+
+        // Show bulk image previews when files are selected
+        document.getElementById('bulkImageInput').addEventListener('change', function(e) {
+            const files = Array.from(e.target.files);
+            if (files.length > 0) {
+                // Show selected file count
+                const selectedFileDiv = document.getElementById('bulkSelectedFile');
+                const fileCountSpan = document.getElementById('bulkFileCount');
+                selectedFileDiv.style.display = 'block';
+                fileCountSpan.textContent = files.length;
+
+                // Show image previews
+                const previewDiv = document.getElementById('bulkPreview');
+                const previewGrid = document.getElementById('bulkPreviewGrid');
+                previewGrid.innerHTML = ''; // Clear previous previews
+                previewDiv.style.display = 'block';
+
+                // Limit preview to first 12 images to avoid performance issues
+                const previewLimit = Math.min(files.length, 12);
+                
+                files.slice(0, previewLimit).forEach((file, index) => {
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        const previewItem = document.createElement('div');
+                        previewItem.className = 'bulk-preview-item';
+                        previewItem.innerHTML = `
+                            <img src="${event.target.result}" alt="Preview ${index + 1}">
+                            <div class="file-name">${file.name}</div>
+                        `;
+                        previewGrid.appendChild(previewItem);
+                    };
+                    reader.readAsDataURL(file);
+                });
+
+                // Show message if more images selected
+                if (files.length > previewLimit) {
+                    const moreMsg = document.createElement('div');
+                    moreMsg.style.gridColumn = '1 / -1';
+                    moreMsg.style.textAlign = 'center';
+                    moreMsg.style.padding = '10px';
+                    moreMsg.style.color = '#666';
+                    moreMsg.textContent = `... and ${files.length - previewLimit} more image(s)`;
+                    previewGrid.appendChild(moreMsg);
+                }
+            } else {
+                // Hide preview if no files
+                document.getElementById('bulkPreview').style.display = 'none';
+                document.getElementById('bulkSelectedFile').style.display = 'none';
+            }
+        });
+
+        // Show image preview when file is selected
+        document.getElementById('imageInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                // Show selected file name
+                const selectedFileDiv = document.getElementById('selectedFile');
+                const fileNameSpan = document.getElementById('fileName');
+                selectedFileDiv.style.display = 'block';
+                fileNameSpan.textContent = file.name + ' (' + (file.size / 1024).toFixed(2) + ' KB)';
+
+                // Show image preview
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const previewImg = document.getElementById('previewImage');
+                    const previewDiv = document.getElementById('imagePreview');
+                    previewImg.src = event.target.result;
+                    previewDiv.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            } else {
+                // Hide preview if no file
+                document.getElementById('imagePreview').style.display = 'none';
+                document.getElementById('selectedFile').style.display = 'none';
+            }
         });
 
         // Predict single image
@@ -378,9 +538,14 @@
                 const data = await response.json();
 
                 if (data.success) {
+                    // Get the preview image source
+                    const previewImg = document.getElementById('previewImage');
+                    const imageSrc = previewImg ? previewImg.src : '';
+                    
                     resultDiv.className = 'result success';
                     resultDiv.innerHTML = `
                         <h3>Prediction Result:</h3>
+                        ${imageSrc ? `<div style="text-align: center; margin-bottom: 15px;"><img src="${imageSrc}" alt="Uploaded image" style="max-width: 100%; max-height: 200px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"></div>` : ''}
                         <div class="prediction-result">
                             <div class="prediction-item">
                                 <strong>Predicted Class:</strong>
