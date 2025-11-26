@@ -51,7 +51,8 @@ def create_model(num_classes, img_size=224):
 
 
 def train_model(model, train_generator, test_generator, epochs=10, 
-                model_save_path='models/plant_disease_model.h5'):
+                model_save_path='models/plant_disease_model.h5',
+                steps_per_epoch=None, validation_steps=None):
     """
     Train the model
     
@@ -61,6 +62,8 @@ def train_model(model, train_generator, test_generator, epochs=10,
         test_generator: Test/validation data generator
         epochs: Number of epochs (default: 10)
         model_save_path: Path to save the best model
+        steps_per_epoch: Number of steps per epoch (None = use all data)
+        validation_steps: Number of validation steps (None = use all data)
     
     Returns:
         Training history
@@ -69,11 +72,12 @@ def train_model(model, train_generator, test_generator, epochs=10,
     model_path = Path(model_save_path)
     model_path.parent.mkdir(parents=True, exist_ok=True)
     
-    # Callbacks
+    # Callbacks - more aggressive early stopping for faster training
     early_stopping = EarlyStopping(
         monitor='val_loss',
-        patience=3,
-        restore_best_weights=True
+        patience=2,  # Reduced from 3 to 2 for faster stopping
+        restore_best_weights=True,
+        min_delta=0.001  # Minimum change to qualify as improvement
     )
     
     model_checkpoint = ModelCheckpoint(
@@ -84,12 +88,22 @@ def train_model(model, train_generator, test_generator, epochs=10,
     )
     
     # Train model
+    fit_kwargs = {
+        'epochs': epochs,
+        'validation_data': test_generator,
+        'callbacks': [early_stopping, model_checkpoint],
+        'verbose': 1
+    }
+    
+    # Add steps limits if provided (for faster training)
+    if steps_per_epoch is not None:
+        fit_kwargs['steps_per_epoch'] = steps_per_epoch
+    if validation_steps is not None:
+        fit_kwargs['validation_steps'] = validation_steps
+    
     history = model.fit(
         train_generator,
-        epochs=epochs,
-        validation_data=test_generator,
-        callbacks=[early_stopping, model_checkpoint],
-        verbose=1
+        **fit_kwargs
     )
     
     return history
@@ -106,6 +120,7 @@ def load_model(model_path):
         Loaded Keras model
     """
     return keras.models.load_model(model_path)
+
 
 
 

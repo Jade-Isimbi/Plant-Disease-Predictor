@@ -333,6 +333,9 @@
 
         <div class="card">
             <h2>Bulk Upload & Retraining</h2>
+            <p style="color: #666; margin-bottom: 15px; font-size: 14px;">
+                <strong>Step 1:</strong> Upload images for retraining | <strong>Step 2:</strong> Trigger retraining
+            </p>
             <div class="upload-area" id="bulkUploadArea">
                 <p>Click to upload multiple images for retraining</p>
                 <input type="file" id="bulkImageInput" accept="image/*" multiple>
@@ -344,12 +347,18 @@
                 <p style="margin-bottom: 10px; color: #666;"><strong>Preview:</strong></p>
                 <div class="bulk-preview-grid" id="bulkPreviewGrid"></div>
             </div>
-            <button class="btn" onclick="uploadBulkImages()">Upload Images</button>
+            <button class="btn" id="bulkUploadBtn" onclick="uploadBulkImages(event)">Upload Images</button>
             <button class="btn" onclick="triggerRetraining()">🔄 Trigger Retraining</button>
+            <div id="uploadStatus" style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px; display: none;">
+                <p style="margin: 0; color: #666; font-size: 14px;">
+                    <strong>Uploaded files ready for retraining:</strong> <span id="uploadedFileCount">0</span>
+                </p>
+            </div>
             <div id="retrainResult" class="result"></div>
             <div class="loading" id="retrainLoading">
                 <div class="spinner"></div>
-                <p>Retraining model... This may take a few minutes.</p>
+                <p><strong>Retraining model with optimized settings...</strong></p>
+                <p style="font-size: 14px; color: #666; margin-top: 5px;">This typically takes 2-3 minutes (reduced from 5+ minutes)</p>
             </div>
         </div>
 
@@ -574,10 +583,29 @@
                 });
                 
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    throw new Error(`HTTP error! status: ${response.status} ${response.statusText}`);
                 }
-                
-                const data = await response.json();
+
+                // Check content type
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const text = await response.text();
+                    throw new Error(`Unexpected response format. Server returned: ${text.substring(0, 200)}`);
+                }
+
+                // Get response text first to check if it's empty
+                const responseText = await response.text();
+                if (!responseText || responseText.trim() === '') {
+                    throw new Error('Empty response from server.');
+                }
+
+                // Parse JSON
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                } catch (parseError) {
+                    throw new Error(`Invalid JSON response: ${responseText.substring(0, 200)}`);
+                }
 
                 if (data.success) {
                     // Get the preview image source
@@ -629,32 +657,139 @@
         }
 
         // Upload bulk images
-        async function uploadBulkImages() {
+        async function uploadBulkImages(event) {
             const fileInput = document.getElementById('bulkImageInput');
-            if (!fileInput.files.length) {
+            if (!fileInput.files || fileInput.files.length === 0) {
                 alert('Please select images first');
                 return;
             }
 
+            const files = Array.from(fileInput.files);
+            const uploadBtn = event?.target || document.getElementById('bulkUploadBtn');
+            const originalBtnText = uploadBtn?.textContent || 'Upload Images';
+            
+            // Show loading state
+            if (uploadBtn) {
+                uploadBtn.disabled = true;
+                uploadBtn.textContent = 'Uploading...';
+            }
+
+            // Show upload status
+            const resultDiv = document.getElementById('retrainResult');
+            resultDiv.style.display = 'block';
+            resultDiv.className = 'result';
+            resultDiv.innerHTML = `<p>Uploading ${files.length} image(s)...</p>`;
+
             const formData = new FormData();
-            for (let file of fileInput.files) {
+            for (let file of files) {
                 formData.append('images', file);
             }
 
             try {
-                const response = await fetch('/api/predict/batch', {
+                const response = await fetch('/api/upload/bulk', {
                     method: 'POST',
                     body: formData
                 });
-                const data = await response.json();
+
+                // Check if response is ok
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    let errorData;
+                    try {
+                        errorData = JSON.parse(errorText);
+                    } catch {
+                        throw new Error(`Server error: ${response.status} ${response.statusText}`);
+                    }
+                    throw new Error(errorData.error || `Server error: ${response.status}`);
+                }
+
+                // Check content type
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const text = await response.text();
+                    throw new Error(`Unexpected response format. Server returned: ${text.substring(0, 200)}`);
+                }
+
+                // Get response text first to check if it's empty
+                const responseText = await response.text();
+                if (!responseText || responseText.trim() === '') {
+                    throw new Error('Empty response from server.');
+                }
+
+                // Parse JSON
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                } catch (parseError) {
+                    throw new Error(`Invalid JSON response: ${responseText.substring(0, 200)}`);
+                }
+
+                // Reset button
+                if (uploadBtn) {
+                    uploadBtn.disabled = false;
+                    uploadBtn.textContent = originalBtnText;
+                }
 
                 if (data.success) {
-                    alert(`Successfully processed ${data.total} images`);
+                    resultDiv.className = 'result success';
+                    let message = `<p><strong>✅ Success!</strong> Uploaded ${data.uploaded} image(s) successfully.</p>`;
+                    
+                    if (data.failed > 0) {
+                        message += `<p style="color: #856404; margin-top: 10px;"><strong>Warning:</strong> ${data.failed} file(s) failed to upload.</p>`;
+                    }
+                    
+                    if (data.errors && data.errors.length > 0) {
+                        message += `<details style="margin-top: 10px;"><summary style="cursor: pointer; color: #666;">View errors (${data.errors.length})</summary><ul style="margin-top: 5px; padding-left: 20px; color: #666; font-size: 14px;">`;
+                        data.errors.forEach(err => {
+                            message += `<li>${err}</li>`;
+                        });
+                        message += `</ul></details>`;
+                    }
+                    
+                    resultDiv.innerHTML = message;
+                    
+                    // Update uploaded file count
+                    updateUploadedFileCount();
+                    
+                    // Clear file input after successful upload
+                    fileInput.value = '';
+                    document.getElementById('bulkSelectedFile').style.display = 'none';
+                    document.getElementById('bulkPreview').style.display = 'none';
+                    document.getElementById('bulkPreviewGrid').innerHTML = '';
                 } else {
-                    alert(`Error: ${data.error}`);
+                    resultDiv.className = 'result error';
+                    let errorMsg = `<p><strong>Error:</strong> ${data.error || 'Unknown error occurred'}</p>`;
+                    if (data.errors && data.errors.length > 0) {
+                        errorMsg += `<ul style="margin-top: 10px; padding-left: 20px;">`;
+                        data.errors.forEach(err => {
+                            errorMsg += `<li>${err}</li>`;
+                        });
+                        errorMsg += `</ul>`;
+                    }
+                    resultDiv.innerHTML = errorMsg;
                 }
             } catch (error) {
-                alert(`Error: ${error.message}`);
+                // Reset button
+                if (uploadBtn) {
+                    uploadBtn.disabled = false;
+                    uploadBtn.textContent = originalBtnText;
+                }
+                
+                resultDiv.className = 'result error';
+                let errorMessage = error.message;
+                let errorDetails = '';
+                
+                if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                    errorMessage = 'Network error: Could not connect to the server.';
+                    errorDetails = '<p style="margin-top: 10px; color: #666; font-size: 14px;">Please ensure the server is running and try again.</p>';
+                }
+                
+                resultDiv.innerHTML = `
+                    <p><strong>Error:</strong> ${errorMessage}</p>
+                    ${errorDetails}
+                    <p style="margin-top: 10px; font-size: 12px; color: #999;">Technical details: ${error.message}</p>
+                `;
+                console.error('Bulk upload error:', error);
             }
         }
 
@@ -669,11 +804,61 @@
             loadingDiv.style.display = 'block';
             resultDiv.style.display = 'none';
 
+            // First, check if server is accessible
+            try {
+                const healthCheck = await fetch('/api/health', { method: 'GET' });
+                if (!healthCheck.ok) {
+                    throw new Error('Server health check failed');
+                }
+            } catch (healthError) {
+                loadingDiv.style.display = 'none';
+                resultDiv.style.display = 'block';
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `
+                    <p><strong>Error:</strong> Cannot connect to server.</p>
+                    <p style="margin-top: 10px; color: #666; font-size: 14px;">Please ensure the server is running and try again.</p>
+                `;
+                console.error('Server health check failed:', healthError);
+                return;
+            }
+
+            // Create AbortController for timeout handling (15 minutes max)
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15 * 60 * 1000); // 15 minutes
+
             try {
                 const response = await fetch('/api/retrain', {
-                    method: 'POST'
+                    method: 'POST',
+                    signal: controller.signal
                 });
-                const data = await response.json();
+
+                clearTimeout(timeoutId);
+
+                // Check if response is ok
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status} ${response.statusText}`);
+                }
+
+                // Check content type
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const text = await response.text();
+                    throw new Error(`Unexpected response format. Server returned: ${text.substring(0, 200)}`);
+                }
+
+                // Get response text first to check if it's empty
+                const responseText = await response.text();
+                if (!responseText || responseText.trim() === '') {
+                    throw new Error('Empty response from server. The retraining process may have timed out or crashed.');
+                }
+
+                // Parse JSON
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                } catch (parseError) {
+                    throw new Error(`Invalid JSON response: ${responseText.substring(0, 200)}`);
+                }
 
                 loadingDiv.style.display = 'none';
                 resultDiv.style.display = 'block';
@@ -681,26 +866,71 @@
                 if (data.success) {
                     resultDiv.className = 'result success';
                     resultDiv.innerHTML = `
-                        <p> Model retrained successfully!</p>
+                        <p>✅ Model retrained successfully!</p>
                         <p>Final Accuracy: ${(data.final_accuracy * 100).toFixed(2)}%</p>
                         <p>Epochs Trained: ${data.epochs_trained}</p>
                     `;
                     checkModelStatus();
+                    updateUploadedFileCount(); // Update uploaded file count
                 } else {
                     resultDiv.className = 'result error';
-                    resultDiv.innerHTML = `<p>Error: ${data.error}</p>`;
+                    resultDiv.innerHTML = `<p><strong>Error:</strong> ${data.error || 'Unknown error occurred'}</p>`;
                 }
             } catch (error) {
+                clearTimeout(timeoutId);
                 loadingDiv.style.display = 'none';
                 resultDiv.style.display = 'block';
                 resultDiv.className = 'result error';
-                resultDiv.innerHTML = `<p>Error: ${error.message}</p>`;
+                
+                let errorMessage = error.message;
+                let errorDetails = '';
+                
+                // Handle specific error types
+                if (error.name === 'AbortError' || error.message.includes('aborted')) {
+                    errorMessage = 'Request timed out. Retraining takes a long time - please check server logs to see if it completed.';
+                    errorDetails = '<p style="margin-top: 10px; color: #666; font-size: 14px;">The server may still be processing. Check the server console/logs to see the retraining progress.</p>';
+                } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                    errorMessage = 'Network error: Could not connect to the server.';
+                    errorDetails = '<p style="margin-top: 10px; color: #666; font-size: 14px;">Possible causes:<br>• Server is not running<br>• Server crashed during retraining<br>• Network connectivity issue<br><br>Please check the server logs and ensure the server is running.</p>';
+                } else if (error.message.includes('timeout')) {
+                    errorMessage = 'Request timed out. Retraining may still be in progress on the server.';
+                    errorDetails = '<p style="margin-top: 10px; color: #666; font-size: 14px;">Check the server console/logs to see if retraining is still running.</p>';
+                }
+                
+                resultDiv.innerHTML = `
+                    <p><strong>Error:</strong> ${errorMessage}</p>
+                    ${errorDetails}
+                    <p style="margin-top: 10px; font-size: 12px; color: #999;">Technical details: ${error.message}</p>
+                `;
+                console.error('Retraining error:', error);
+            }
+        }
+
+        // Update uploaded file count
+        async function updateUploadedFileCount() {
+            try {
+                const response = await fetch('/api/upload/count');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success) {
+                        const countEl = document.getElementById('uploadedFileCount');
+                        const statusEl = document.getElementById('uploadStatus');
+                        if (countEl && statusEl) {
+                            countEl.textContent = data.count;
+                            statusEl.style.display = data.count > 0 ? 'block' : 'none';
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching upload count:', error);
             }
         }
 
        
         checkModelStatus();
-        setInterval(checkModelStatus, 30000); 
+        updateUploadedFileCount();
+        setInterval(checkModelStatus, 30000);
+        setInterval(updateUploadedFileCount, 10000); // Update every 10 seconds
     </script>
 </body>
 </html>

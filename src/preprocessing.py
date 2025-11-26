@@ -20,14 +20,14 @@ def create_data_generators(train_dir, test_dir, img_size=224, batch_size=32):
         train_generator: Training data generator with augmentation
         test_generator: Test data generator (no augmentation)
     """
-    # Data augmentation for training
+    # Data augmentation for training (reduced for faster processing)
     train_datagen = ImageDataGenerator(
         rescale=1./255,
-        rotation_range=20,
-        width_shift_range=0.2,
-        height_shift_range=0.2,
+        rotation_range=15,  # Reduced from 20
+        width_shift_range=0.15,  # Reduced from 0.2
+        height_shift_range=0.15,  # Reduced from 0.2
         horizontal_flip=True,
-        zoom_range=0.2,
+        zoom_range=0.15,  # Reduced from 0.2
         fill_mode='nearest'
     )
     
@@ -54,7 +54,7 @@ def create_data_generators(train_dir, test_dir, img_size=224, batch_size=32):
     return train_generator, test_generator
 
 
-def preprocess_image(image_path, img_size=224):
+def preprocess_image(image_path, img_size=160):
     """
     Preprocess a single image for prediction
     
@@ -88,6 +88,7 @@ def get_class_names(data_dir):
     data_path = Path(data_dir)
     class_names = sorted([d.name for d in data_path.iterdir() if d.is_dir()])
     return class_names
+
 
 
 

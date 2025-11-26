@@ -6,7 +6,7 @@ from tensorflow.keras.preprocessing import image
 from .preprocessing import preprocess_image
 
 
-def predict_image(image_path, model, class_names, img_size=224):
+def predict_image(image_path, model, class_names, img_size=160):
     """
     Predict the class of a single image
     
@@ -40,7 +40,7 @@ def predict_image(image_path, model, class_names, img_size=224):
     return predicted_class, confidence, all_predictions
 
 
-def predict_batch(image_paths, model, class_names, img_size=224):
+def predict_batch(image_paths, model, class_names, img_size=160):
     """
     Predict classes for multiple images
     
