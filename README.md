@@ -124,7 +124,7 @@ model = load_model('models/plant_disease_model.h5')
 ## Project Structure
 
 ```
-MLOP/
+Plant-Disease-Predictor/
 ├── api/app.py              # Flask API
 ├── models/                 # Trained model (.h5)
 ├── notebook/               # Jupyter notebook
