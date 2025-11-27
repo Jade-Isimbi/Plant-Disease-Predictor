@@ -93,7 +93,7 @@ For 50 concurrent users . These were the results:
 - 0% failure rate
 - Total requests: 6,961
   
-![Uploading Screenshot 2025-11-27 at 11.11.55 AM.png…]()
+
 
 ##  Model File
 
