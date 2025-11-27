@@ -8,7 +8,7 @@ A complete ML pipeline for classifying plant diseases from leaf images using tra
 
 ##  Web app URL
 
-** Link:** https://plant-disease-predictor-nqho.onrender.com/
+**Link:** https://plant-disease-predictor-nqho.onrender.com/
 
 ##  Project Description
 
